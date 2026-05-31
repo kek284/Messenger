@@ -85,6 +85,11 @@ public class ObjectChatServer {
                         send(ObjectResponse.error("Неверная сессия"));
                     }
                 }
+                case "ping" -> {
+                    if (!valid(request.session)) {
+                        close();
+                    }
+                }
                 case "logout" -> {
                     if (valid(request.session)) {
                         send(ObjectResponse.ok(null, null, null));

@@ -16,7 +16,7 @@ public class XmlChatTransport implements ChatTransport {
     private DataInputStream input;
     private DataOutputStream output;
     private ChatListener listener;
-    private String session;
+    private volatile String session;
     private final BlockingQueue<Document> responses = new LinkedBlockingQueue<>();
 
     @Override
@@ -35,6 +35,7 @@ public class XmlChatTransport implements ChatTransport {
         Document response = takeResponse();
         ensureSuccess(response);
         session = XmlProtocol.text(response, "session");
+        startHeartbeat();
         for (ChatEvent event : history(response)) {
             listener.onEvent(event);
         }
@@ -103,6 +104,33 @@ public class XmlChatTransport implements ChatTransport {
         Document command = XmlProtocol.command(name);
         XmlProtocol.append(command, command.getDocumentElement(), "session", session);
         return command;
+    }
+
+    private void startHeartbeat() {
+        Thread heartbeat = new Thread(() -> {
+            while (session != null && socket != null && !socket.isClosed()) {
+                try {
+                    Thread.sleep(30000);
+                    String currentSession = session;
+                    if (currentSession != null && !socket.isClosed()) {
+                        Document ping = XmlProtocol.command("ping");
+                        XmlProtocol.append(ping, ping.getDocumentElement(), "session", currentSession);
+                        send(ping);
+                    }
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                    return;
+                } catch (Exception e) {
+                    if (listener != null && session != null) {
+                        listener.onError("Соединение потеряно: " + e.getMessage());
+                    }
+                    close();
+                    return;
+                }
+            }
+        }, "xml-heartbeat");
+        heartbeat.setDaemon(true);
+        heartbeat.start();
     }
 
     private synchronized void send(Document document) throws Exception {

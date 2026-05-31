@@ -32,4 +32,8 @@ public class ObjectRequest implements Serializable {
     public static ObjectRequest logout(String session) {
         return new ObjectRequest("logout", null, null, session, null);
     }
+
+    public static ObjectRequest ping(String session) {
+        return new ObjectRequest("ping", null, null, session, null);
+    }
 }

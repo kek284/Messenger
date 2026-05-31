@@ -91,6 +91,11 @@ public class XmlChatServer {
                         send(XmlProtocol.error("Неверная сессия"));
                     }
                 }
+                case "ping" -> {
+                    if (!valid(XmlProtocol.text(document, "session"))) {
+                        close();
+                    }
+                }
                 case "logout" -> {
                     String requestSession = XmlProtocol.text(document, "session");
                     if (valid(requestSession)) {

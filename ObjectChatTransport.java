@@ -11,7 +11,7 @@ public class ObjectChatTransport implements ChatTransport {
     private ObjectOutputStream output;
     private ObjectInputStream input;
     private ChatListener listener;
-    private String session;
+    private volatile String session;
     private final BlockingQueue<ObjectResponse> responses = new LinkedBlockingQueue<>();
 
     @Override
@@ -29,6 +29,7 @@ public class ObjectChatTransport implements ChatTransport {
             throw new IllegalStateException(response.error);
         }
         session = response.session;
+        startHeartbeat();
         for (ChatEvent event : response.history) {
             listener.onEvent(event);
         }
@@ -83,6 +84,31 @@ public class ObjectChatTransport implements ChatTransport {
                 listener.onError("Соединение закрыто: " + e.getMessage());
             }
         }
+    }
+
+    private void startHeartbeat() {
+        Thread heartbeat = new Thread(() -> {
+            while (session != null && socket != null && !socket.isClosed()) {
+                try {
+                    Thread.sleep(30000);
+                    String currentSession = session;
+                    if (currentSession != null && !socket.isClosed()) {
+                        send(ObjectRequest.ping(currentSession));
+                    }
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                    return;
+                } catch (Exception e) {
+                    if (listener != null && session != null) {
+                        listener.onError("Соединение потеряно: " + e.getMessage());
+                    }
+                    close();
+                    return;
+                }
+            }
+        }, "object-heartbeat");
+        heartbeat.setDaemon(true);
+        heartbeat.start();
     }
 
     private synchronized void send(Object object) throws Exception {
